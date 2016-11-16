@@ -8,6 +8,7 @@ CREATE TABLE topics (
 	,topic text
 	,category text
 	,searchterm text
+	,database_name text
 	,CONSTRAINT toppk PRIMARY KEY (id)  
 );
 
@@ -22,11 +23,12 @@ CREATE TABLE tweets (
 	,CONSTRAINT tsfk FOREIGN KEY (topicid) REFERENCES public.topics(id) 
 );
 -- -------------------------------------------------------------------------------------------
-CREATE TABLE twitterdata (  
+CREATE TABLE tweetmetas (  
 	 id serial 
 	,lexcategory text
 	,relevance double precision
 	,sentiment text
+	,sentiment_value double precision
 	,tweetid integer
 	,CONSTRAINT twpk PRIMARY KEY (id)
 	,CONSTRAINT twfk FOREIGN KEY (tweetid ) REFERENCES public.tweets (id) 
@@ -34,20 +36,20 @@ CREATE TABLE twitterdata (
 -- ===========================================================================================
 -- insert data
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_topics(_topic text,_category text,_searchterm text)
+CREATE OR REPLACE FUNCTION insert_into_topics(_topic text,_category text,_searchterm text,_database_name text)
       RETURNS integer AS 
       $BODY$
 	  DECLARE
 		newid integer;
           BEGIN
-		INSERT INTO topics(topic, category, searchterm)		
-		VALUES (_topic, _category, _searchterm) RETURNING id INTO newid;
+		INSERT INTO topics(topic, category, searchterm,database_name)		
+		VALUES (_topic, _category, _searchterm,_database_name) RETURNING id INTO newid;
 		RETURN newid;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_topics('bla','blabla','blablabla');
+SELECT * from insert_into_topics('bla','blabla','blablabla','postgre');
 -- -------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION insert_into_tweets(_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
       RETURNS integer AS
@@ -62,40 +64,41 @@ CREATE OR REPLACE FUNCTION insert_into_tweets(_topicid integer,_creator text,_cr
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_tweets(14,'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from insert_into_tweets((SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_twitterdata(_lexcategory text,_relevance double precision,_sentiment text,_tweetid integer)
+CREATE OR REPLACE FUNCTION insert_into_tweetmetas(_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid integer)
       RETURNS integer AS
       $BODY$
 	  DECLARE
 		newid integer;
           BEGIN
-		INSERT INTO twitterdata(lexcategory, relevance, sentiment, tweetid)
-		VALUES (_lexcategory, _relevance, _sentiment, _tweetid) RETURNING id INTO newid;
+		INSERT INTO tweetmetas(lexcategory, relevance, sentiment, sentiment_value,tweetid)
+		VALUES (_lexcategory, _relevance, _sentiment, _sentiment_value,_tweetid) RETURNING id INTO newid;
 		RETURN newid;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_twitterdata('bla12',0.5,'superduper',2);
+SELECT * from insert_into_tweetmetas('bla12',0.5,'superduper',0.5,(SELECT id from tweets limit 1));
 -- ===========================================================================================
 -- replace data
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_topics(_id integer,_topic text,_category text,_searchterm text)
+CREATE OR REPLACE FUNCTION update_topics(_id integer,_topic text,_category text,_searchterm text,_database_name text)
 	RETURNS void AS
 	$BODY$
 	    BEGIN
 		UPDATE public.topics
 		SET 
-			topic	= _topic, 
-			category= _category, 
-			searchterm =_searchterm
+			  topic = _topic
+			, category = _category
+			, searchterm =_searchterm
+			, database_name = _database_name
 		WHERE 	id = _id;
 	   END
 	$BODY$
 	LANGUAGE plpgsql VOLATILE
 	COST 100;
-select * from update_topics((SELECT id from topics limit 1),'fufu','gugu','lulu');
+select * from update_topics((SELECT id from topics limit 1),'fufu','gugu','lulu','mongo');
 -- -----------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION update_tweets(_id integer,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
       RETURNS void AS
@@ -114,36 +117,37 @@ CREATE OR REPLACE FUNCTION update_tweets(_id integer,_topicid integer,_creator t
       COST 100;
 select * from update_tweets((SELECT id from tweets limit 1),(SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-06-16 15:36:38','{ "customers": "Joe Smoex", "items": {"product": "Beer","qty": 6}}');
 -- -----------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_twitterdata(_id integer,_lexcategory text,_relevance double precision,_sentiment text,_tweetid integer)
+CREATE OR REPLACE FUNCTION update_tweetmetas(_id integer,_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid integer)
       RETURNS void AS
       $BODY$
           BEGIN
-		UPDATE twitterdata
+		UPDATE tweetmetas
 		SET
-			lexcategory = _lexcategory, 
-			relevance = _relevance, 
-			sentiment = _sentiment, 
-			tweetid = _tweetid
+			  lexcategory = _lexcategory
+			, relevance = _relevance
+			, sentiment = _sentiment
+			, sentiment_value = _sentiment_value
+			, tweetid = _tweetid
 		WHERE 	id = _id;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-select * from update_twitterdata((SELECT id from twitterdata limit 1),'mumu',0.7,'great',(SELECT id from tweets limit 1));
+select * from update_tweetmetas((SELECT id from tweetmetas limit 1),'mumu',0.7,'great',2.5,(SELECT id from tweets limit 1));
 -- ===========================================================================================
 -- drop data
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION delete_twitterdata(_id integer)
+CREATE OR REPLACE FUNCTION delete_tweetmetas(_id integer)
 	RETURNS void AS
 	$BODY$
 	    BEGIN
-		DELETE FROM twitterdata
+		DELETE FROM tweetmetas
 		WHERE id = _id;
 	   END
 	$BODY$
 	LANGUAGE plpgsql VOLATILE
 	COST 100;
-select * from delete_twitterdata((SELECT id from twitterdata limit 1));
+select * from delete_tweetmetas((SELECT id from tweetmetas limit 1));
 -- -------------------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION delete_tweets(_id integer)
 	RETURNS void AS
