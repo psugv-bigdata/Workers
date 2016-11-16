@@ -14,7 +14,7 @@ CREATE TABLE topics (
 
 -- -------------------------------------------------------------------------------------------
 CREATE TABLE tweets (
-	 id serial 
+	 id bigint 
 	,topicid integer
 	,creator text
 	,createdat timestamp
@@ -29,7 +29,7 @@ CREATE TABLE tweetmetas (
 	,relevance double precision
 	,sentiment text
 	,sentiment_value double precision
-	,tweetid integer
+	,tweetid bigint
 	,CONSTRAINT twpk PRIMARY KEY (id)
 	,CONSTRAINT twfk FOREIGN KEY (tweetid ) REFERENCES public.tweets (id) 
 );
@@ -51,22 +51,19 @@ CREATE OR REPLACE FUNCTION insert_into_topics(_topic text,_category text,_search
       COST 100;
 SELECT * from insert_into_topics('bla','blabla','blablabla','postgre');
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_tweets(_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
-      RETURNS integer AS
+CREATE OR REPLACE FUNCTION insert_into_tweets(_id bigint,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
+      RETURNS void AS
       $BODY$
-	  DECLARE
-		newid integer;
           BEGIN
-		INSERT INTO tweets(topicid, creator, createdat, rawtweet)
-		VALUES (_topicid, _creator, _createdat, _rawtweet) RETURNING id INTO newid;
-		RETURN newid;
+		INSERT INTO tweets(id,topicid, creator, createdat, rawtweet)
+		VALUES (_id,_topicid,_creator,_createdat,_rawtweet);
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_tweets((SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from insert_into_tweets(112,(SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_tweetmetas(_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid integer)
+CREATE OR REPLACE FUNCTION insert_into_tweetmetas(_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid bigint)
       RETURNS integer AS
       $BODY$
 	  DECLARE
@@ -100,7 +97,7 @@ CREATE OR REPLACE FUNCTION update_topics(_id integer,_topic text,_category text,
 	COST 100;
 select * from update_topics((SELECT id from topics limit 1),'fufu','gugu','lulu','mongo');
 -- -----------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_tweets(_id integer,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
+CREATE OR REPLACE FUNCTION update_tweets(_id bigint,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
       RETURNS void AS
       $BODY$
           BEGIN
@@ -117,7 +114,7 @@ CREATE OR REPLACE FUNCTION update_tweets(_id integer,_topicid integer,_creator t
       COST 100;
 select * from update_tweets((SELECT id from tweets limit 1),(SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-06-16 15:36:38','{ "customers": "Joe Smoex", "items": {"product": "Beer","qty": 6}}');
 -- -----------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_tweetmetas(_id integer,_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid integer)
+CREATE OR REPLACE FUNCTION update_tweetmetas(_id integer,_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid bigint)
       RETURNS void AS
       $BODY$
           BEGIN
@@ -149,7 +146,7 @@ CREATE OR REPLACE FUNCTION delete_tweetmetas(_id integer)
 	COST 100;
 select * from delete_tweetmetas((SELECT id from tweetmetas limit 1));
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION delete_tweets(_id integer)
+CREATE OR REPLACE FUNCTION delete_tweets(_id bigint)
 	RETURNS void AS
 	$BODY$
 	    BEGIN
