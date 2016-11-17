@@ -1,172 +1,116 @@
 ﻿-- ===========================================================================================
 -- connect with twitter
+-- DROP TABLE IF EXISTS tweetmetas;
+-- DROP TABLE IF EXISTS tweets;
+-- DROP TABLE IF EXISTS topics;
+-- DROP TABLE IF EXISTS cleantext; *** avoid deleting this one!!!!!!!
 -- ===========================================================================================
 -- create tables
 -- -------------------------------------------------------------------------------------------
 CREATE TABLE topics (
-	 id serial
-	,topic text
+	 topic text
 	,category text
 	,searchterm text
-	,database_name text
-	,CONSTRAINT toppk PRIMARY KEY (id)  
+	,CONSTRAINT twitter_tppk1 PRIMARY KEY (topic,category)  
 );
 
 -- -------------------------------------------------------------------------------------------
 CREATE TABLE tweets (
 	 id bigint 
-	,topicid integer
 	,creator text
 	,createdat timestamp
 	,rawtweet json
-	,CONSTRAINT tspk PRIMARY KEY (id) 
-	,CONSTRAINT tsfk FOREIGN KEY (topicid) REFERENCES public.topics(id) 
+	,CONSTRAINT twitter_twpk1 PRIMARY KEY (id) 
 );
 -- -------------------------------------------------------------------------------------------
 CREATE TABLE tweetmetas (  
-	 id serial 
+	 topic text
+	,category text
+	,tweetid bigint
 	,lexcategory text
 	,relevance double precision
 	,sentiment text
 	,sentiment_value double precision
-	,tweetid bigint
-	,CONSTRAINT twpk PRIMARY KEY (id)
-	,CONSTRAINT twfk FOREIGN KEY (tweetid ) REFERENCES public.tweets (id) 
+	,CONSTRAINT twitter_tmpk1 PRIMARY KEY (topic,category,tweetid,lexcategory)
+	,CONSTRAINT twitter_tmfk1 FOREIGN KEY (tweetid) REFERENCES public.tweets (id) 
+);
+-- -------------------------------------------------------------------------------------------
+CREATE TABLE cleantext (
+	 pattern text
+	,replacement text
+	,CONSTRAINT twitter_ctpk1 PRIMARY KEY (pattern,replacement)
 );
 -- ===========================================================================================
--- insert data
+-- process data
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_topics(_topic text,_category text,_searchterm text,_database_name text)
-      RETURNS integer AS 
+CREATE OR REPLACE FUNCTION process_topics(_topic text,_category text,_searchterm text = NULL)
+      RETURNS void AS 
       $BODY$
-	  DECLARE
-		newid integer;
-          BEGIN
-		INSERT INTO topics(topic, category, searchterm,database_name)		
-		VALUES (_topic, _category, _searchterm,_database_name) RETURNING id INTO newid;
-		RETURN newid;
+        BEGIN
+		IF _searchterm IS NULL THEN
+			DELETE FROM topics WHERE  category = _category AND topic = _topic;
+		ELSIF (SELECT count(*) FROM topics WHERE category = _category AND topic = _topic) > 0 THEN
+			UPDATE	topics
+			SET 	searchterm =_searchterm
+			WHERE 	category = _category AND topic = _topic;
+		ELSE
+			INSERT INTO topics(topic, category, searchterm)		
+			VALUES (_topic, _category, _searchterm);
+		END IF;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_topics('bla','blabla','blablabla','postgre');
+SELECT * from process_topics('bla','blabla','blablabla');
+SELECT * from process_topics('bla','blabla','blablabla1');
+SELECT * from process_topics('bla','blabla');
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_tweets(_id bigint,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
+CREATE OR REPLACE FUNCTION process_tweets(_id bigint,_creator text = NULL,_createdat timestamp = NULL,_rawtweet json = NULL)
       RETURNS void AS
       $BODY$
           BEGIN
-		INSERT INTO tweets(id,topicid, creator, createdat, rawtweet)
-		VALUES (_id,_topicid,_creator,_createdat,_rawtweet);
+		IF _rawtweet IS NULL THEN
+			DELETE FROM tweets WHERE  id = _id;
+		ELSIF (SELECT count(*) FROM tweets WHERE id = _id) > 0 THEN
+			UPDATE	tweets
+			SET 	 creator = _creator
+				,createdat = _createdat
+				,rawtweet = _rawtweet
+			WHERE 	id = _id;
+		ELSE
+			INSERT INTO tweets(id,creator,createdat,rawtweet)
+			VALUES (_id,_creator,_createdat,_rawtweet);
+		END IF;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-SELECT * from insert_into_tweets(112,(SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from process_tweets(112,'blabla1',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from process_tweets(112,'blabla2',TIMESTAMP '2011-05-17 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from process_tweets(112);
 -- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION insert_into_tweetmetas(_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid bigint)
-      RETURNS integer AS
-      $BODY$
-	  DECLARE
-		newid integer;
-          BEGIN
-		INSERT INTO tweetmetas(lexcategory, relevance, sentiment, sentiment_value,tweetid)
-		VALUES (_lexcategory, _relevance, _sentiment, _sentiment_value,_tweetid) RETURNING id INTO newid;
-		RETURN newid;
-          END;
-      $BODY$
-      LANGUAGE 'plpgsql' VOLATILE
-      COST 100;
-SELECT * from insert_into_tweetmetas('bla12',0.5,'superduper',0.5,(SELECT id from tweets limit 1));
--- ===========================================================================================
--- replace data
--- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_topics(_id integer,_topic text,_category text,_searchterm text,_database_name text)
-	RETURNS void AS
-	$BODY$
-	    BEGIN
-		UPDATE public.topics
-		SET 
-			  topic = _topic
-			, category = _category
-			, searchterm =_searchterm
-			, database_name = _database_name
-		WHERE 	id = _id;
-	   END
-	$BODY$
-	LANGUAGE plpgsql VOLATILE
-	COST 100;
-select * from update_topics((SELECT id from topics limit 1),'fufu','gugu','lulu','mongo');
--- -----------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_tweets(_id bigint,_topicid integer,_creator text,_createdat timestamp,_rawtweet json)
+CREATE OR REPLACE FUNCTION process_tweetmetas(_topic text,_category text,_tweetid bigint,_lexcategory text,_relevance double precision = NULL,_sentiment text = NULL,_sentiment_value double precision = NULL)
       RETURNS void AS
       $BODY$
           BEGIN
-		UPDATE tweets
-		SET
-			topicid = _topicid, 
-			creator = _creator, 
-			createdat = _createdat, 
-			rawtweet = _rawtweet
-		WHERE 	id = _id;
+		IF _sentiment IS NULL THEN
+			DELETE FROM tweetmetas WHERE topic=_topic AND category=_category AND tweetid=_tweetid AND lexcategory=_lexcategory;
+		ELSIF (SELECT count(*) FROM tweetmetas WHERE topic=_topic AND category=_category AND tweetid=_tweetid AND lexcategory=_lexcategory) > 0 THEN
+			UPDATE	tweetmetas
+			SET 	 relevance	= _relevance
+				,sentiment	= _sentiment
+				,sentiment_value	= _sentiment_value
+			WHERE 	topic=_topic AND category=_category AND tweetid=_tweetid AND lexcategory=_lexcategory;
+		ELSE
+			INSERT INTO tweetmetas(topic,category,tweetid,lexcategory,relevance,sentiment,sentiment_value)
+			VALUES (_topic,_category,_tweetid,_lexcategory,_relevance,_sentiment,_sentiment_value);
+		END IF;
           END;
       $BODY$
       LANGUAGE 'plpgsql' VOLATILE
       COST 100;
-select * from update_tweets((SELECT id from tweets limit 1),(SELECT id from topics limit 1),'blabla1',TIMESTAMP '2011-06-16 15:36:38','{ "customers": "Joe Smoex", "items": {"product": "Beer","qty": 6}}');
--- -----------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION update_tweetmetas(_id integer,_lexcategory text,_relevance double precision,_sentiment text,_sentiment_value double precision,_tweetid bigint)
-      RETURNS void AS
-      $BODY$
-          BEGIN
-		UPDATE tweetmetas
-		SET
-			  lexcategory = _lexcategory
-			, relevance = _relevance
-			, sentiment = _sentiment
-			, sentiment_value = _sentiment_value
-			, tweetid = _tweetid
-		WHERE 	id = _id;
-          END;
-      $BODY$
-      LANGUAGE 'plpgsql' VOLATILE
-      COST 100;
-select * from update_tweetmetas((SELECT id from tweetmetas limit 1),'mumu',0.7,'great',2.5,(SELECT id from tweets limit 1));
--- ===========================================================================================
--- drop data
--- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION delete_tweetmetas(_id integer)
-	RETURNS void AS
-	$BODY$
-	    BEGIN
-		DELETE FROM tweetmetas
-		WHERE id = _id;
-	   END
-	$BODY$
-	LANGUAGE plpgsql VOLATILE
-	COST 100;
-select * from delete_tweetmetas((SELECT id from tweetmetas limit 1));
--- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION delete_tweets(_id bigint)
-	RETURNS void AS
-	$BODY$
-	    BEGIN
-		DELETE FROM tweets
-		WHERE id = _id;
-	   END
-	$BODY$
-	LANGUAGE plpgsql VOLATILE
-	COST 100;
-select * from delete_tweets((SELECT id from tweets limit 1));
--- -------------------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION delete_topics(_id integer)
-	RETURNS void AS
-	$BODY$
-	    BEGIN
-		DELETE FROM topics
-		WHERE id = _id;
-	   END
-	$BODY$
-	LANGUAGE plpgsql VOLATILE
-	COST 100;
-select * from delete_topics((SELECT id from topics limit 1));
+SELECT * from process_tweets(112,'creator',TIMESTAMP '2011-05-16 15:36:38','{ "customer": "Joe Smoe", "items": {"product": "Beer","qty": 6}}');
+SELECT * from process_tweetmetas('topic1','cat1',112,'social',0.5,'Positive',3.5);
+SELECT * from process_tweetmetas('topic1','cat1',112,'social',0.6,'Negative',1.5);
+SELECT * from process_tweetmetas('topic1','cat1',112,'social');
 -- ===========================================================================================
